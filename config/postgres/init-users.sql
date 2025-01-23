@@ -1,10 +1,12 @@
--- Create roles and users table
+-- File: config/postgres/init-users.sql
+-- Create roles table
 CREATE TABLE roles (
     id SERIAL PRIMARY KEY,
     name VARCHAR(50) UNIQUE NOT NULL,
     description TEXT
 );
 
+-- Create users table
 CREATE TABLE users (
     id SERIAL PRIMARY KEY,
     username VARCHAR(50) UNIQUE NOT NULL,
@@ -12,10 +14,10 @@ CREATE TABLE users (
     password_hash VARCHAR(255) NOT NULL,
     role_id INTEGER REFERENCES roles(id),
     is_active BOOLEAN DEFAULT TRUE,
-    last_login TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Create permissions table
 CREATE TABLE permissions (
     id SERIAL PRIMARY KEY,
     role_id INTEGER REFERENCES roles(id),
@@ -32,11 +34,11 @@ INSERT INTO roles (name, description) VALUES
 INSERT INTO permissions (role_id, resource, access_level)
 SELECT id, 
        CASE 
-           WHEN name = 'admin' THEN 'qgis_desktop,file_browser,status_page'
-           ELSE 'limited_qgis_desktop,personal_file_browser'
+           WHEN name = 'admin' THEN 'all_resources'
+           ELSE 'limited_resources'
        END,
        CASE 
            WHEN name = 'admin' THEN 'full_access'
-           ELSE 'read_write'
+           ELSE 'read_only'
        END
 FROM roles;
