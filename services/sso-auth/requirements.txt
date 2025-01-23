@@ -1,0 +1,6 @@
+# File: services/sso-auth/requirements.txt
+flask==2.1.0
+psycopg2-binary==2.9.3
+pyjwt==2.3.0
+werkzeug==2.1.1
+python-dotenv==0.20.0
