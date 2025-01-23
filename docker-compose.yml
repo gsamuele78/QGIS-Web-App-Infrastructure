@@ -1,3 +1,4 @@
+# File: docker-compose.yml
 version: '3.8'
 
 services:
@@ -5,20 +6,65 @@ services:
   sso-auth:
     build: 
       context: ./services/sso-auth
-      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    environment:
+      - AUTH_SECRET_KEY=${AUTH_SECRET_KEY}
+      - QWC_DB_NAME=${QWC_DB_NAME}
+      - QWC_DB_USER=${QWC_DB_USER}
+      - QWC_DB_PASSWORD=${QWC_DB_PASSWORD}
     volumes:
       - ./config/sso-auth:/app/config
       - ./logs/sso-auth:/app/logs
-    environment:
-      - POSTGRES_DB=${QWC_DB_NAME}
-      - POSTGRES_USER=${QWC_DB_USER}
-      - POSTGRES_PASSWORD=${QWC_DB_PASSWORD}
-      - AUTH_SECRET_KEY=${AUTH_SECRET_KEY}
     depends_on:
-      - qwc-database
-    restart: unless-stopped
+      - database
 
-  # Nginx with Enhanced SSO Integration
+  # QGIS Desktop Service
+  qgis-desktop:
+    build: 
+      context: ./services/qgis-desktop
+    volumes:
+      - ./shared/qgis:/home/qgis/shared
+      - ./config/qgis-desktop:/config
+    environment:
+      - SSO_AUTH_URL=http://sso-auth:5000
+      - VNC_PASSWORD=${NOVNC_PASSWORD}
+      - DISPLAY=:1
+    depends_on:
+      - sso-auth
+    ports:
+      - "6080:6080"
+
+  # NoVNC Service
+  novnc:
+    image: theasp/novnc
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+    volumes:
+      - ./shared/novnc:/shared
+    ports:
+      - "6901:6901"
+    depends_on:
+      - qgis-desktop
+
+  # File Browser Service
+  file-browser:
+    image: filebrowser/filebrowser
+    volumes:
+      - ./shared:/srv
+      - ./config/filebrowser:/config
+      - ./config/filebrowser/filebrowser.db:/database.db
+    environment:
+      - SSO_AUTH_URL=http://sso-auth:5000
+      - PUID=${PUID}
+      - PGID=${PGID}
+    ports:
+      - "8080:80"
+    depends_on:
+      - sso-auth
+
+  # Nginx Reverse Proxy
   nginx:
     image: nginx:latest
     ports:
@@ -33,51 +79,36 @@ services:
     depends_on:
       - sso-auth
       - qgis-desktop
-      - novnc
       - file-browser
-    restart: unless-stopped
 
-  # QGIS Desktop with SSO Integration
-  qgis-desktop:
-    build: 
-      context: ./services/qgis-desktop
-      dockerfile: Dockerfile
+  # Certbot for SSL
+  certbot:
+    image: certbot/certbot
     volumes:
-      - ./shared:/home/qgis/shared
-    environment:
-      - SSO_AUTH_URL=http://sso-auth:5000
-      - PUID=${PUID:-1000}
-      - PGID=${PGID:-1000}
-    depends_on:
-      - sso-auth
-    restart: unless-stopped
+      - ./data/certbot/conf:/etc/letsencrypt
+      - ./data/certbot/www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
 
-  # File Browser with SSO
-  file-browser:
-    image: filebrowser/filebrowser
-    volumes:
-      - ./shared:/srv
-      - ./config/filebrowser:/config
-      - ./config/filebrowser/filebrowser.db:/database.db
-    environment:
-      - SSO_AUTH_URL=http://sso-auth:5000
-      - PUID=${PUID:-1000}
-      - PGID=${PGID:-1000}
-    depends_on:
-      - sso-auth
-    restart: unless-stopped
-
-  # Database for Authentication and Services
-  qwc-database:
+  # PostgreSQL Database
+  database:
     image: postgres:13
-    volumes:
-      - ./data/postgres:/var/lib/postgresql/data
-      - ./config/postgres/init-users.sql:/docker-entrypoint-initdb.d/init-users.sql
     environment:
       - POSTGRES_DB=${QWC_DB_NAME}
       - POSTGRES_USER=${QWC_DB_USER}
       - POSTGRES_PASSWORD=${QWC_DB_PASSWORD}
-    restart: unless-stopped
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+      - ./config/postgres/init-users.sql:/docker-entrypoint-initdb.d/init-users.sql
+    ports:
+      - "5432:5432"
+
+  # Status Page
+  status-page:
+    image: bastienwirtz/homer
+    volumes:
+      - ./config/homer:/www/assets
+    ports:
+      - "9090:8080"
 
 networks:
   default:
