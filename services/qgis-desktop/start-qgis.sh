@@ -4,14 +4,17 @@
 # Set display for X11
 export DISPLAY=:1
 
-# Optional: Configure SSO authentication if needed
-if [ -n "$SSO_AUTH_URL" ]; then
-    # Add SSO authentication logic here
-    echo "Authenticating with SSO service: $SSO_AUTH_URL"
-fi
+# Attempt SSO authentication
+python3 /home/qgis/sso_auth.py
 
-# Start QGIS in the background
-qgis --norestore &
+# Check authentication status
+if [ $? -eq 0 ]; then
+    # Start QGIS with authenticated user context
+    qgis --norestore &
+else
+    echo "SSO Authentication Failed. Exiting."
+    exit 1
+fi
 
 # Keep container running
 wait
