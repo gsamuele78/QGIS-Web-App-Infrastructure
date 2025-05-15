@@ -1,8 +1,6 @@
-# File: docker-compose.yml
 version: '3.8'
 
 services:
-  # SSO Authentication Service
   sso-auth:
     build: 
       context: ./services/sso-auth
@@ -19,7 +17,6 @@ services:
     depends_on:
       - database
 
-  # QGIS Desktop Service
   qgis-desktop:
     build: 
       context: ./services/qgis-desktop
@@ -28,43 +25,13 @@ services:
       - ./config/qgis-desktop:/config
     environment:
       - SSO_AUTH_URL=http://sso-auth:5000
-      - VNC_PASSWORD=${NOVNC_PASSWORD}
-      - DISPLAY=:1
-    depends_on:
-      - sso-auth
+      - XPRA_PASSWORD=${XPRA_PASSWORD}
+      - DISPLAY=:100
     ports:
-      - "6080:6080"
-
-  # NoVNC Service
-  novnc:
-    image: theasp/novnc
-    environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-    volumes:
-      - ./shared/novnc:/shared
-    ports:
-      - "6901:6901"
-    depends_on:
-      - qgis-desktop
-
-  # File Browser Service
-  file-browser:
-    image: filebrowser/filebrowser
-    volumes:
-      - ./shared:/srv
-      - ./config/filebrowser:/config
-      - ./config/filebrowser/filebrowser.db:/database.db
-    environment:
-      - SSO_AUTH_URL=http://sso-auth:5000
-      - PUID=${PUID}
-      - PGID=${PGID}
-    ports:
-      - "8080:80"
+      - "14500:14500"
     depends_on:
       - sso-auth
 
-  # Nginx Reverse Proxy
   nginx:
     image: nginx:latest
     ports:
@@ -75,21 +42,10 @@ services:
       - ./logs/nginx:/var/log/nginx
       - ./data/certbot/conf:/etc/letsencrypt
       - ./data/certbot/www:/var/www/certbot
-      - ./shared:/var/www/shared
     depends_on:
       - sso-auth
       - qgis-desktop
-      - file-browser
 
-  # Certbot for SSL
-  certbot:
-    image: certbot/certbot
-    volumes:
-      - ./data/certbot/conf:/etc/letsencrypt
-      - ./data/certbot/www:/var/www/certbot
-    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
-
-  # PostgreSQL Database
   database:
     image: postgres:13
     environment:
@@ -101,14 +57,6 @@ services:
       - ./config/postgres/init-users.sql:/docker-entrypoint-initdb.d/init-users.sql
     ports:
       - "5432:5432"
-
-  # Status Page
-  status-page:
-    image: bastienwirtz/homer
-    volumes:
-      - ./config/homer:/www/assets
-    ports:
-      - "9090:8080"
 
 networks:
   default:

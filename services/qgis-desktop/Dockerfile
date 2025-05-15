@@ -1,4 +1,4 @@
-# File: services/qgis-desktop/Dockerfile
+# Base image with Xpra support
 FROM ubuntu:22.04
 
 # Avoid interactive prompts
@@ -9,13 +9,16 @@ RUN apt-get update && apt-get install -y \
     wget \
     gnupg \
     software-properties-common \
-    xvfb \
-    x11vnc \
-    novnc \
-    supervisor \
+    xpra \
     python3-pip \
     curl \
-    jq
+    jq \
+    dbus \
+    dbus-x11 \
+    xterm \
+    xauth \
+    python3-xdg \
+    supervisor
 
 # Add QGIS repository
 RUN wget -O - https://qgis.org/downloads/qgis-2022.gpg.key | gpg --dearmor > /etc/apt/trusted.gpg.d/qgis-archive.gpg
@@ -38,18 +41,28 @@ RUN pip3 install \
     rasterio
 
 # Create qgis user
-RUN useradd -m -s /bin/bash -G sudo qgis
-USER qgis
-WORKDIR /home/qgis
+RUN useradd -m -s /bin/bash qgis
+RUN mkdir -p /run/user/1000
+RUN chown -R qgis:qgis /run/user/1000
 
-# Copy SSO authentication scripts
+# Set up Xpra configuration
+RUN mkdir -p /etc/xpra
+COPY xpra.conf /etc/xpra/xpra.conf
+
+# Copy authentication and startup scripts
 COPY sso_auth.py /home/qgis/sso_auth.py
-COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY start-qgis.sh /start-qgis.sh
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
 RUN chmod +x /start-qgis.sh /home/qgis/sso_auth.py
+RUN chown -R qgis:qgis /home/qgis
 
-# Expose VNC and NoVNC ports
-EXPOSE 5901 6080
+# Expose Xpra port
+EXPOSE 14500
 
-# Set default command
+# Set environment variables
+ENV DISPLAY=:100
+ENV XPRA_PORT=14500
+ENV XPRA_START_VIA_PROXY=1
+
 CMD ["/usr/bin/supervisord"]
